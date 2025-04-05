@@ -1,6 +1,6 @@
 import * as net from "net";
 
-type TCPConn = {
+export type TCPConn = {
     socket: net.Socket;
 
     error: null|Error;
@@ -17,21 +17,19 @@ type TCPListener = {
     server: net.Server;
 }
 
-function onInit(socket: net.Socket) {
+export function onInit(socket: net.Socket): TCPConn {
     const conn: TCPConn = {
-        socket,
-        error: null,
-        ended: false,
-        reader: null
-    };
-    socket.on("data", (data: Buffer) => {
+        socket, error: null, ended: false, reader: null,
+    }
+
+    socket.on('data', (buffer) => {
         conn.socket.pause();
-        
-        conn.reader!.resolve(data);
+
+        conn.reader!.resolve(buffer);
         conn.reader = null;
     });
 
-    socket.on("error", (err: Error) => {
+    socket.on('error', (err) => {
         conn.error = err;
         if (conn.reader) {
             conn.reader.reject(err);
@@ -42,84 +40,75 @@ function onInit(socket: net.Socket) {
     socket.on('end', () => {
         conn.ended = true;
         if (conn.reader) {
-            conn.reader.resolve(Buffer.from("")); // EOF
+            conn.reader.resolve(Buffer.from(''));
             conn.reader = null;
         }
-    })
-
+    });
     return conn;
 }
 
-function onRead(conn: TCPConn) {
+export function onRead(conn: TCPConn): Promise<Buffer> {
     return new Promise<Buffer>((resolve, reject) => {
         if (conn.ended) {
-            resolve(Buffer.from("")); // EOF
+            resolve(Buffer.from(''));
             return;
         }
+
         if (conn.error) {
             reject(conn.error);
             return;
         }
+
         conn.reader = { resolve, reject };
         conn.socket.resume();
-    });
+    })
 }
 
-function onWrite(conn: TCPConn, data: Buffer) {
-    return new Promise<void>((resolve, reject) => {
+export function onWrite(conn: TCPConn, data: Buffer): Promise<void> {
+    return new Promise<void>((res, rej) => {
         if (conn.ended) {
-            resolve();
+            res();
             return;
         }
         if (conn.error) {
-            reject(conn.error);
+            rej(conn.error);
             return;
         }
-        conn.socket.write(data, (err?: Error) => {
+
+        conn.socket.write(data, (err) => {
             if (err) {
                 conn.error = err;
-                reject(err);
+                rej(err);
                 return;
             }
-            resolve();
-        });
-    });
+            res();
+        })
+    })
 }
 
-async function serverClient(socket: net.Socket): Promise<void> {
-    const conn: TCPConn = onInit(socket);
-    while (true) {
-        const data = await onRead(conn);
-        if (data.length === 0) {
-            console.log('end connection');
-            break;
-        }
-
-        console.log('data', data);
-        await onWrite(conn, data);
-    }
-}
-
-function onListen(port: number) {
-    const server = net.createServer({ pauseOnConnect: true });
+export function onListen(port = 8000) {
+    const server = net.createServer({pauseOnConnect: true});
     server.listen(port);
     return server;
 }
 
-function onAccept(listener: TCPListener): Promise<TCPConn> {
-    return new Promise((resolve, reject) => {
-        listener.server.once("connection", (socket) => {
+export function onAccept(listener: TCPListener): Promise<TCPConn> {
+    return new Promise<TCPConn>((done, fail) => {
+        listener.server.once('connection', (socket) => {
             const conn = onInit(socket);
-            resolve(conn);
+            done(conn);  
         })
     });
 }
 
-export {
-    onInit,
-    onRead,
-    onWrite,
-    onAccept,
-    onListen,
-    serverClient,
+export async function requestHandler(conn: TCPConn) {
+    while (true) {
+        const data = await onRead(conn);
+        if (data.length === 0) {
+            break;
+        }
+
+        await onWrite(conn, data);
+    }
+    conn.socket.destroy();
 }

@@ -1,21 +1,18 @@
-import * as net from "node:net";
-import { onAccept, onListen, serverClient } from "./socket";
+import { onAccept, onListen, requestHandler, TCPConn } from "./socket";
 
-async function newConn(socket: net.Socket): Promise<void> {
+async function newConn(connection: TCPConn): Promise<void> {
     try {
-        await serverClient(socket);   
+        await requestHandler(connection);   
     } catch (error) {
         console.error('exception:', error);
-    } finally {
-        socket.destroy();
     }
 }
 
 const server = onListen(8000);
 
 (async () => {
-    const conn = await onAccept({ server });
-    console.log('new connection');
-    newConn(conn.socket);
-}
+        const conn = await onAccept({ server });
+        console.log('new connection');
+        newConn(conn);
+    }
 )();
