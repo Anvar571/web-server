@@ -13,6 +13,10 @@ type TCPConn = {
     }
 }
 
+type TCPListener = {
+    server: net.Server;
+}
+
 function onInit(socket: net.Socket) {
     const conn: TCPConn = {
         socket,
@@ -38,7 +42,7 @@ function onInit(socket: net.Socket) {
     socket.on('end', () => {
         conn.ended = true;
         if (conn.reader) {
-            conn.reader.resolve(Buffer.from(""));
+            conn.reader.resolve(Buffer.from("")); // EOF
             conn.reader = null;
         }
     })
@@ -49,7 +53,7 @@ function onInit(socket: net.Socket) {
 function onRead(conn: TCPConn) {
     return new Promise<Buffer>((resolve, reject) => {
         if (conn.ended) {
-            resolve(Buffer.from(""));
+            resolve(Buffer.from("")); // EOF
             return;
         }
         if (conn.error) {
@@ -96,9 +100,26 @@ async function serverClient(socket: net.Socket): Promise<void> {
     }
 }
 
+function onListen(port: number) {
+    const server = net.createServer({ pauseOnConnect: true });
+    server.listen(port);
+    return server;
+}
+
+function onAccept(listener: TCPListener): Promise<TCPConn> {
+    return new Promise((resolve, reject) => {
+        listener.server.once("connection", (socket) => {
+            const conn = onInit(socket);
+            resolve(conn);
+        })
+    });
+}
+
 export {
     onInit,
     onRead,
     onWrite,
-    serverClient
+    onAccept,
+    onListen,
+    serverClient,
 }

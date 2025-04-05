@@ -1,5 +1,5 @@
 import * as net from "node:net";
-import { serverClient } from "./socket";
+import { onAccept, onListen, serverClient } from "./socket";
 
 async function newConn(socket: net.Socket): Promise<void> {
     try {
@@ -11,10 +11,11 @@ async function newConn(socket: net.Socket): Promise<void> {
     }
 }
 
-const server = net.createServer({ pauseOnConnect: true });
+const server = onListen(8000);
 
-server.on("connection", newConn);
-
-server.listen(8080, () => {
-    console.log("Server listening on port 8080");
-});
+(async () => {
+    const conn = await onAccept({ server });
+    console.log('new connection');
+    newConn(conn.socket);
+}
+)();
