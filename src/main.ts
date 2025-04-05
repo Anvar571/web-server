@@ -1,23 +1,17 @@
 import * as net from "node:net";
+import { serverClient } from "./socket";
 
-function newConn(socket: net.Socket): void {
-    console.log('new connection', socket.remoteAddress, socket.remotePort);
-
-    socket.on('end', () => {
-        console.log('EOF.');
-    });
-    socket.on('data', (data: Buffer) => {
-        console.log('data:', data);
-        socket.write(data);
-
-        if (data.includes('q')) {
-            console.log('closing.');
-            socket.end();
-        }
-    });
+async function newConn(socket: net.Socket): Promise<void> {
+    try {
+        await serverClient(socket);   
+    } catch (error) {
+        console.error('exception:', error);
+    } finally {
+        socket.destroy();
+    }
 }
 
-const server = net.createServer();
+const server = net.createServer({ pauseOnConnect: true });
 
 server.on("connection", newConn);
 
