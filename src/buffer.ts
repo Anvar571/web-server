@@ -1,10 +1,14 @@
+import { HTTPError, HTTPReq, parseHTTPReq } from "./http";
+
 export type DynBuf = {
     data: Buffer,
     length: number,
 }
 
-// Buffer.concat([]) O(n^2) instead of Buffer.alloc()
+// max length of a HTTP header
+const kMaxHeaderLen = 1024 * 8;
 
+// Buffer.concat([]) O(n^2) instead of Buffer.alloc()
 export function bufPush(buf: DynBuf, data: Buffer) {
     const newLen = buf.length + data.length;
     if (buf.data.length < newLen) {
@@ -22,13 +26,16 @@ export function bufPush(buf: DynBuf, data: Buffer) {
     buf.length = newLen;
 }
 
-export function cutMessage(buf: DynBuf): null | Buffer {
-    const idx = buf.data.subarray(0, buf.length).indexOf('\n');
+export function cutMessage(buf: DynBuf): null | HTTPReq {
+    const idx = buf.data.subarray(0, buf.length).indexOf('\r\n\r\n');
     if (idx < 0) {
+        if (buf.length >= kMaxHeaderLen) {
+            throw new HTTPError(413, "Header is too large");
+        }
         return null;
     }
-    const msg = Buffer.from(buf.data.subarray(0, idx + 1));
-    bufPop(buf, idx+1);
+    const msg = parseHTTPReq(buf.data.subarray(0, idx + 4));
+    bufPop(buf, idx+4);
     return msg;
 }
 
