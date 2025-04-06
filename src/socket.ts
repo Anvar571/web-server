@@ -1,4 +1,5 @@
 import * as net from "net";
+import { DynBuf, bufPush, cutMessage } from "./buffer";
 
 export type TCPConn = {
     socket: net.Socket;
@@ -102,13 +103,24 @@ export function onAccept(listener: TCPListener): Promise<TCPConn> {
 }
 
 export async function requestHandler(conn: TCPConn) {
+    const buf: DynBuf = { data: Buffer.alloc(0), length: 0 };
     while (true) {
-        const data = await onRead(conn);
-        if (data.length === 0) {
-            break;
+        const msg = cutMessage(buf);
+        if (!msg) {
+            const data = await onRead(conn);
+            bufPush(buf, data);
+            if (data.length === 0) {
+                return;
+            }
+            continue;
         }
 
-        await onWrite(conn, data);
+        if (msg.equals(Buffer.from('quit\n'))) {
+            await onWrite(conn, Buffer.from("Goodbye!"));
+            conn.socket.destroy();
+        }else {
+            const reply = Buffer.concat([Buffer.from('Echo: '), msg]);
+            await onWrite(conn, reply);
+        }
     }
-    conn.socket.destroy();
 }
